@@ -207,8 +207,8 @@ func NewTrieDbState(root common.Hash, db ethdb.Database, blockNr uint64) *TrieDb
 	}
 	t.SetTouchFunc(tp.Touch)
 
-	tp.SetEvictNodeFunc(tds.putIntermediateHash)
-	tp.SetCreateNodeFunc(tds.delIntermediateHash)
+	tp.SetOnNodeEvicted(tds.putIntermediateHash)
+	tp.SetOnNodeCreated(tds.delIntermediateHash)
 
 	return tds
 }
@@ -247,8 +247,8 @@ func (tds *TrieDbState) Copy() *TrieDbState {
 		incarnationMap: make(map[common.Hash]uint64),
 	}
 
-	cpy.tp.SetEvictNodeFunc(cpy.putIntermediateHash)
-	cpy.tp.SetCreateNodeFunc(cpy.delIntermediateHash)
+	cpy.tp.SetOnNodeEvicted(cpy.putIntermediateHash)
+	cpy.tp.SetOnNodeCreated(cpy.delIntermediateHash)
 
 	return &cpy
 }
