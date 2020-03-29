@@ -228,3 +228,86 @@ func (n hashNode) String() string     { return n.fstring("") }
 func (n valueNode) String() string    { return n.fstring("") }
 func (n codeNode) String() string     { return n.fstring("") }
 func (an accountNode) String() string { return an.fstring("") }
+
+func (n accountNode) size() uint {
+	size := uint(0)
+	size += uint(len(n.CodeHash))
+	size += uint(8) // nonce
+	size += uint(len(n.Root))
+	size += uint(len(n.Balance.Bytes()))
+	size += uint(len(n.code))
+	size += uint(sizeOfSubtrie(n.storage))
+	return size
+}
+
+func sizeOfAccounts(node node) int64 {
+	switch n := node.(type) {
+	case nil:
+		return 0
+	case valueNode:
+		return 0
+	case *shortNode:
+		return sizeOfAccounts(n.Val)
+	case *duoNode:
+		return sizeOfAccounts(n.child1) + sizeOfAccounts(n.child2)
+	case *fullNode:
+		size := int64(0)
+		for _, child := range n.Children {
+			size += sizeOfAccounts(child)
+		}
+		return size
+	case *accountNode:
+		return int64(n.size())
+	case hashNode:
+		return 0
+	}
+	return 0
+}
+
+func numberOfAccounts(node node) int64 {
+	switch n := node.(type) {
+	case nil:
+		return 0
+	case valueNode:
+		return 0
+	case *shortNode:
+		return numberOfAccounts(n.Val)
+	case *duoNode:
+		return numberOfAccounts(n.child1) + numberOfAccounts(n.child2)
+	case *fullNode:
+		size := int64(0)
+		for _, child := range n.Children {
+			size += numberOfAccounts(child)
+		}
+		return size
+	case *accountNode:
+		return int64(1)
+	case hashNode:
+		return 0
+	}
+	return 0
+}
+
+func sizeOfSubtrie(node node) int {
+	switch n := node.(type) {
+	case nil:
+		return 0
+	case valueNode:
+		return len(n)
+	case *shortNode:
+		return len(n.Key) + sizeOfSubtrie(n.Val)
+	case *duoNode:
+		return 4 /* mask */ + sizeOfSubtrie(n.child1) + sizeOfSubtrie(n.child2)
+	case *fullNode:
+		size := 4 /* mask */
+		for _, child := range n.Children {
+			size += sizeOfSubtrie(child)
+		}
+		return size
+	case *accountNode:
+		return int(n.size())
+	case hashNode:
+		return len(n)
+	}
+	return 0
+}

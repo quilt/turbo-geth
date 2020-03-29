@@ -39,8 +39,8 @@ import (
 	"github.com/ledgerwatch/turbo-geth/trie"
 )
 
-// Trie cache generation limit after which to evict trie nodes from memory.
-var MaxTrieCacheGen = uint32(1024 * 1024)
+// Trie cache size limit after which to evict trie nodes from memory.
+var MaxTrieCacheSize = uint64(1024 * 1024 * 1024 * 4) // 4 GB
 
 const (
 	//FirstContractIncarnation - first incarnation for contract accounts. After 1 it increases by 1.
@@ -192,7 +192,7 @@ type TrieDbState struct {
 
 func NewTrieDbState(root common.Hash, db ethdb.Database, blockNr uint64) *TrieDbState {
 	t := trie.New(root)
-	tp := trie.NewTrieEviction(blockNr)
+	tp := trie.NewTrieEviction()
 
 	tds := &TrieDbState{
 		t:                 t,
@@ -205,10 +205,11 @@ func NewTrieDbState(root common.Hash, db ethdb.Database, blockNr uint64) *TrieDb
 		hashBuilder:       trie.NewHashBuilder(false),
 		incarnationMap:    make(map[common.Hash]uint64),
 	}
-	t.SetTouchFunc(tp.Touch)
 
-	tp.SetOnNodeEvicted(tds.putIntermediateHash)
-	tp.SetOnNodeCreated(tds.delIntermediateHash)
+	tp.SetBlockNumber(blockNr)
+
+	t.AddObserver(tp)
+	t.AddObserver(NewIntermediateHashes(tds.db, tds.db))
 
 	return tds
 }
@@ -235,7 +236,8 @@ func (tds *TrieDbState) Copy() *TrieDbState {
 	tds.tMu.Unlock()
 
 	n := tds.getBlockNr()
-	tp := trie.NewTrieEviction(n)
+	tp := trie.NewTrieEviction()
+	tp.SetBlockNumber(n)
 
 	cpy := TrieDbState{
 		t:              &tcopy,
@@ -247,8 +249,8 @@ func (tds *TrieDbState) Copy() *TrieDbState {
 		incarnationMap: make(map[common.Hash]uint64),
 	}
 
-	cpy.tp.SetOnNodeEvicted(cpy.putIntermediateHash)
-	cpy.tp.SetOnNodeCreated(cpy.delIntermediateHash)
+	cpy.t.AddObserver(tp)
+	cpy.t.AddObserver(NewIntermediateHashes(cpy.db, cpy.db))
 
 	return &cpy
 }
@@ -502,30 +504,6 @@ func StorageTombstonesIntegrityDBCheck(tx *bolt.Tx) error {
 		}
 	}
 	return nil
-}
-
-func (tds *TrieDbState) putIntermediateHash(key []byte, nodeHash []byte) {
-	if err := tds.db.Put(dbutils.IntermediateTrieHashBucket, common.CopyBytes(key), common.CopyBytes(nodeHash)); err != nil {
-		log.Warn("could not put intermediate trie hash", "err", err)
-	}
-}
-
-func (tds *TrieDbState) delIntermediateHash(prefixAsNibbles []byte) {
-	if len(prefixAsNibbles) == 0 {
-		return
-	}
-
-	if len(prefixAsNibbles)%2 == 1 { // only put to bucket prefixes with even number of nibbles
-		return
-	}
-
-	key := make([]byte, len(prefixAsNibbles)/2)
-	trie.CompressNibbles(prefixAsNibbles, &key)
-
-	if err := tds.db.Delete(dbutils.IntermediateTrieHashBucket, key); err != nil {
-		log.Warn("could not delete intermediate trie hash", "err", err)
-		return
-	}
 }
 
 func (tds *TrieDbState) Database() ethdb.Database {
@@ -899,7 +877,7 @@ func (tds *TrieDbState) ResolveStateTrieStateless(database trie.WitnessStorage) 
 			return nil
 		}
 
-		pos, err := resolver.ResolveStateless(database, tds.blockNr, MaxTrieCacheGen, startPos)
+		pos, err := resolver.ResolveStateless(database, tds.blockNr, uint32(MaxTrieCacheSize), startPos)
 		if err != nil {
 			return err
 		}
@@ -1114,13 +1092,13 @@ func (tds *TrieDbState) Rebuild() error {
 
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	log.Info("Memory after rebuild", "nodes", tds.tp.NodeCount(), "alloc", int(m.Alloc/1024), "sys", int(m.Sys/1024), "numGC", int(m.NumGC))
+	log.Info("Memory after rebuild", "size(leaves)", tds.tp.TotalSize(), "alloc", int(m.Alloc/1024), "sys", int(m.Sys/1024), "numGC", int(m.NumGC))
 	return nil
 }
 
 func (tds *TrieDbState) SetBlockNr(blockNr uint64) {
 	tds.setBlockNr(blockNr)
-	tds.tp.SetBlockNr(blockNr)
+	tds.tp.SetBlockNumber(blockNr)
 }
 
 func (tds *TrieDbState) GetBlockNr() uint64 {
@@ -1488,25 +1466,41 @@ type TrieStateWriter struct {
 func (tds *TrieDbState) PruneTries(print bool) {
 	tds.tMu.Lock()
 	defer tds.tMu.Unlock()
+	strict := true
 	tds.incarnationMap = make(map[common.Hash]uint64)
 	if print {
-		prunableNodes := tds.t.CountPrunableNodes()
-		fmt.Printf("[Before] Actual prunable nodes: %d, accounted: %d\n", prunableNodes, tds.tp.NodeCount())
+		trieSize := tds.t.TrieSize()
+		fmt.Println("") // newline for better formatting
+		fmt.Printf("[Before] Actual nodes size: %dMB, accounted size: %dMB\n", trieSize/1024/1024, tds.tp.TotalSize()/1024/1024)
 	}
 
-	tds.tp.EvictTo(tds.t, int(MaxTrieCacheGen))
+	if strict {
+		actualSize := uint64(tds.t.TrieSize())
+		accountedSize := tds.tp.TotalSize()
+		if actualSize != accountedSize {
+			panic(fmt.Errorf("account size mismatch: trie=%v eviction=%v", actualSize, accountedSize))
+		}
+
+		actualAccounts := uint64(tds.t.NumberOfAccounts())
+		accountedAccounts := tds.tp.NumberOf()
+		if actualAccounts != accountedAccounts {
+			panic(fmt.Errorf("account number mismatch: trie=%v eviction=%v", actualAccounts, accountedAccounts))
+		}
+	}
+
+	tds.tp.EvictToFitSize(tds.t, MaxTrieCacheSize)
 
 	if print {
-		prunableNodes := tds.t.CountPrunableNodes()
-		fmt.Printf("[After] Actual prunable nodes: %d, accounted: %d\n", prunableNodes, tds.tp.NodeCount())
+		trieSize := tds.t.TrieSize()
+		fmt.Printf("[After] Actual nodes size: %dMB, accounted size: %dMB\n", trieSize/1024/1024, tds.tp.TotalSize()/1024/1024)
 	}
 
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
-	log.Info("Memory", "nodes", tds.tp.NodeCount(), "hashes", tds.t.HashMapSize(),
+	log.Info("Memory", "nodes size", tds.tp.TotalSize(), "hashes", tds.t.HashMapSize(),
 		"alloc", int(m.Alloc/1024), "sys", int(m.Sys/1024), "numGC", int(m.NumGC))
 	if print {
-		fmt.Printf("Pruning done. Nodes: %d, alloc: %d, sys: %d, numGC: %d\n", tds.tp.NodeCount(), int(m.Alloc/1024), int(m.Sys/1024), int(m.NumGC))
+		fmt.Printf("Eviction done. Nodes size: %d, alloc: %d, sys: %d, numGC: %d\n", tds.tp.TotalSize(), int(m.Alloc/1024), int(m.Sys/1024), int(m.NumGC))
 	}
 }
 
@@ -1656,7 +1650,8 @@ func (tsw *TrieStateWriter) CreateContract(address common.Address) error {
 }
 
 func (tds *TrieDbState) TriePruningDebugDump() string {
-	return tds.tp.DebugDump()
+	// FIXME: restore
+	return ""
 }
 
 func (tds *TrieDbState) getBlockNr() uint64 {

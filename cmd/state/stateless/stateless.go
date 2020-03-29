@@ -150,7 +150,8 @@ func Stateless(
 	witnessDatabasePath string,
 	writeHistory bool,
 ) {
-	state.MaxTrieCacheGen = triesize
+
+	state.MaxTrieCacheSize = uint64(triesize)
 	startTime := time.Now()
 	sigs := make(chan os.Signal, 1)
 	interruptCh := make(chan bool, 1)
@@ -327,7 +328,10 @@ func Stateless(
 				return
 			}
 			if len(resolveWitnesses) > 0 {
-				witnessDBWriter.MustUpsert(blockNum, state.MaxTrieCacheGen, resolveWitnesses)
+				witnessDBWriter.MustUpsert(blockNum, uint32(state.MaxTrieCacheSize), resolveWitnesses)
+			}
+			if blockNum > 0 && blockNum%100000 == 0 {
+				tds.PruneTries(false)
 			}
 		}
 		execTime2 := time.Since(execStart)
@@ -452,12 +456,14 @@ func Stateless(
 
 		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		if batch.BatchSize() >= 100000 || willSnapshot {
+		//tds.PruneTries(true)
+
+		if batch.BatchSize() >= 1000 || willSnapshot {
 			if _, err := batch.Commit(); err != nil {
 				fmt.Printf("Failed to commit batch: %v\n", err)
 				return
 			}
-			tds.PruneTries(false)
+			//	tds.PruneTries(true)
 		}
 
 		if willSnapshot {
