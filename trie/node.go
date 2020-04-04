@@ -36,6 +36,10 @@ type node interface {
 	reference() []byte
 }
 
+type leaf interface {
+	size() uint
+}
+
 type (
 	// DESCRIBED: docs/programmers_guide/guide.md#hexary-radix-patricia-tree
 	fullNode struct {
@@ -231,20 +235,18 @@ func (n valueNode) String() string    { return n.fstring("") }
 func (n codeNode) String() string     { return n.fstring("") }
 func (an accountNode) String() string { return an.fstring("") }
 
-func (n accountNode) size() uint {
-	if n.sizeCorrect {
-		return n.sizeCache
-	}
+func (n *accountNode) size() uint {
 	size := uint(0)
 	size += uint(len(n.CodeHash))
 	size += uint(8) // nonce
 	size += uint(len(n.Root))
 	size += uint(len(n.Balance.Bytes()))
 	size += uint(len(n.code))
-	size += uint(sizeOfSubtrie(n.storage))
-	n.sizeCache = size
-	n.sizeCorrect = true
 	return size
+}
+
+func (n valueNode) size() uint {
+	return uint(len([]byte(n)))
 }
 
 func sizeOfAccounts(node node) int64 {

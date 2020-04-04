@@ -160,68 +160,6 @@ func TestObserverUpdateAccountSizeViaCode(t *testing.T) {
 	}
 }
 
-func TestObserverUpdateAccountSizeViaStorage(t *testing.T) {
-	trie := newEmpty()
-
-	observer := newMockObserver()
-
-	trie.AddObserver(observer)
-
-	keys := genNKeys(10)
-	for _, key := range keys {
-		acc := genAccount()
-		trie.UpdateAccount(key, acc)
-
-		oldSize, ok := observer.createdAccounts[common.Bytes2Hex(key)]
-		assert.True(t, ok, "account should be registed as created")
-
-		storageKeys := genNKeys(10)
-		// add more nodes -> grows
-		for i, storageKey := range storageKeys {
-			fullKey := dbutils.GenerateCompositeTrieKey(common.BytesToHash(key), common.BytesToHash(storageKey))
-			trie.Update(fullKey, []byte(fmt.Sprintf("value-short-%d", i)))
-
-			newSize, ok := observer.createdAccounts[common.Bytes2Hex(key)]
-			assert.True(t, ok, "account should be registed as created")
-			assert.True(t, newSize > oldSize, "account storage should grow when adding nodes")
-			oldSize = newSize
-		}
-
-		// change existing nodes to have more data -> grows
-		for i, storageKey := range storageKeys {
-			fullKey := dbutils.GenerateCompositeTrieKey(common.BytesToHash(key), common.BytesToHash(storageKey))
-			trie.Update(fullKey, []byte(fmt.Sprintf("value-long-0101010101010101010101010101010-%d", i)))
-
-			newSize, ok := observer.createdAccounts[common.Bytes2Hex(key)]
-			assert.True(t, ok, "account should be registed as created")
-			assert.True(t, newSize > oldSize, "account storage should grow when making node values bigger")
-			oldSize = newSize
-		}
-
-		// change existing nodes to have less data -> shrinks
-		for i, storageKey := range storageKeys {
-			fullKey := dbutils.GenerateCompositeTrieKey(common.BytesToHash(key), common.BytesToHash(storageKey))
-			trie.Update(fullKey, []byte(fmt.Sprintf("v-%d", i)))
-
-			newSize, ok := observer.createdAccounts[common.Bytes2Hex(key)]
-			assert.True(t, ok, "account should be registed as created")
-			assert.True(t, newSize < oldSize, "account storage should shrink when making node values smaller")
-			oldSize = newSize
-		}
-
-		// remove nodes -> shrinks
-		for _, storageKey := range storageKeys {
-			fullKey := dbutils.GenerateCompositeTrieKey(common.BytesToHash(key), common.BytesToHash(storageKey))
-			trie.Delete(fullKey)
-
-			newSize, ok := observer.createdAccounts[common.Bytes2Hex(key)]
-			assert.True(t, ok, "account should be registed as created")
-			assert.True(t, newSize < oldSize, "account storage should shrink when removind nodes")
-			oldSize = newSize
-		}
-	}
-}
-
 func TestObserverUnloadNodes(t *testing.T) {
 	rand.Seed(9999)
 
@@ -278,7 +216,9 @@ func TestObserverUnloadNodes(t *testing.T) {
 	assert.Equal(t, 0, len(observer.reloadedNodes), "adding nodes doesn't add anything")
 
 	// unloading nodes adds to the list
+	fmt.Println("evict1")
 	trie.EvictLeaf(keys[0])
+	fmt.Println("evict2")
 	trie.EvictLeaf(keys[1])
 	trie.EvictLeaf(keys[2])
 
