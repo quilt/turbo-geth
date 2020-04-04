@@ -274,9 +274,9 @@ func (t *Trie) UpdateAccount(key []byte, acc *accounts.Account) {
 
 	var newnode *accountNode
 	if value.Root == EmptyRoot || value.Root == (common.Hash{}) {
-		newnode = &accountNode{*value, nil, true, nil}
+		newnode = &accountNode{*value, nil, true, false, 0, nil}
 	} else {
-		newnode = &accountNode{*value, hashNode(value.Root[:]), true, nil}
+		newnode = &accountNode{*value, hashNode(value.Root[:]), true, false, 0, nil}
 	}
 
 	if t.root == nil {
@@ -474,6 +474,7 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 				}
 				origAccN.Account.Copy(&vAccN.Account)
 				origAccN.rootCorrect = false
+				origAccN.sizeCorrect = false
 			}
 			newNode = origAccN
 
@@ -503,6 +504,7 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 		if updated {
 			n.storage = nn
 			n.rootCorrect = false
+			n.sizeCorrect = false
 			t.observers.AccountSizeChanged(key[:pos], n.size())
 		}
 		t.observers.AccountTouched(key[:pos])
@@ -999,6 +1001,7 @@ func (t *Trie) delete(origNode node, key []byte, keyStart int, preserveAccountNo
 				n.storage = nil
 				n.Root = EmptyRoot
 				n.rootCorrect = true
+				n.sizeCorrect = false
 				t.observers.AccountSizeChanged(h, n.size())
 				return true, n
 			}
@@ -1010,6 +1013,7 @@ func (t *Trie) delete(origNode node, key []byte, keyStart int, preserveAccountNo
 		if updated {
 			n.storage = nn
 			n.rootCorrect = false
+			n.sizeCorrect = false
 			t.observers.AccountSizeChanged(key[:keyStart], n.size())
 			t.observers.AccountTouched(key[:keyStart])
 		}

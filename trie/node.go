@@ -62,6 +62,8 @@ type (
 		accounts.Account
 		storage     node
 		rootCorrect bool
+		sizeCorrect bool
+		sizeCache   uint
 		code        codeNode
 	}
 
@@ -230,6 +232,9 @@ func (n codeNode) String() string     { return n.fstring("") }
 func (an accountNode) String() string { return an.fstring("") }
 
 func (n accountNode) size() uint {
+	if n.sizeCorrect {
+		return n.sizeCache
+	}
 	size := uint(0)
 	size += uint(len(n.CodeHash))
 	size += uint(8) // nonce
@@ -237,6 +242,8 @@ func (n accountNode) size() uint {
 	size += uint(len(n.Balance.Bytes()))
 	size += uint(len(n.code))
 	size += uint(sizeOfSubtrie(n.storage))
+	n.sizeCache = size
+	n.sizeCorrect = true
 	return size
 }
 
