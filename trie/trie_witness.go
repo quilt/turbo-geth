@@ -7,7 +7,7 @@ func (t *Trie) ExtractWitness(blockNr uint64, trace bool, rs *ResolveSet) (*Witn
 }
 
 func (t *Trie) ExtractWitnessForPrefix(prefix []byte, blockNr uint64, trace bool, rs *ResolveSet) (*Witness, error) {
-	node, _, _, _, found := t.getNode(prefix, false)
+	node, _, found := t.getNode(prefix, false)
 	if !found {
 		return nil, errors.New("no data found for given prefix")
 	}

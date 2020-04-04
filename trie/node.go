@@ -254,7 +254,7 @@ func sizeOfAccounts(node node) int64 {
 	case nil:
 		return 0
 	case valueNode:
-		return 0
+		return int64(len([]byte(n)))
 	case *shortNode:
 		return sizeOfAccounts(n.Val)
 	case *duoNode:
@@ -266,7 +266,7 @@ func sizeOfAccounts(node node) int64 {
 		}
 		return size
 	case *accountNode:
-		return int64(n.size())
+		return int64(n.size()) + sizeOfAccounts(n.storage)
 	case hashNode:
 		return 0
 	}
@@ -278,7 +278,7 @@ func numberOfAccounts(node node) int64 {
 	case nil:
 		return 0
 	case valueNode:
-		return 0
+		return 1
 	case *shortNode:
 		return numberOfAccounts(n.Val)
 	case *duoNode:
@@ -290,7 +290,7 @@ func numberOfAccounts(node node) int64 {
 		}
 		return size
 	case *accountNode:
-		return int64(1)
+		return int64(1) + numberOfAccounts(n.storage)
 	case hashNode:
 		return 0
 	}
