@@ -32,7 +32,7 @@ func newMockAccountEvicter() *mockAccountEvicter {
 	return &mockAccountEvicter{make([][]byte, 0)}
 }
 
-func (m *mockAccountEvicter) EvictAccount(key []byte) {
+func (m *mockAccountEvicter) EvictLeaf(key []byte) {
 	m.keys = append(m.keys, key)
 }
 
@@ -141,7 +141,7 @@ func TestEvictionNoNeedMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x02, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -149,7 +149,7 @@ func TestEvictionNoNeedMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x03, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -157,7 +157,7 @@ func TestEvictionNoNeedMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x04, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -165,7 +165,7 @@ func TestEvictionNoNeedMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x05, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -203,7 +203,7 @@ func TestEvictionPartialMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x02, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -211,7 +211,7 @@ func TestEvictionPartialMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x03, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -219,7 +219,7 @@ func TestEvictionPartialMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x04, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -227,7 +227,7 @@ func TestEvictionPartialMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x05, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -291,7 +291,7 @@ func TestEvictionFullMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x02, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -299,7 +299,7 @@ func TestEvictionFullMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x03, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -307,7 +307,7 @@ func TestEvictionFullMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x04, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 
@@ -315,7 +315,7 @@ func TestEvictionFullMultipleGen(t *testing.T) {
 
 	// create 10kb or accounts
 	for i := 0; i < 10; i++ {
-		key := []byte{0x01, 0x01, 0x01, byte(i)}
+		key := []byte{0x05, 0x01, 0x01, byte(i)}
 		eviction.AccountCreated(keybytesToHex(key), 1024)
 	}
 

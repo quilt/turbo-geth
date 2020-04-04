@@ -10,7 +10,7 @@ import (
 // unload those if possible
 // (shortNodes, duoNodes, fullNodes)
 // non thread-safe
-func (t *Trie) EvictAccount(hex []byte) {
+func (t *Trie) EvictLeaf(hex []byte) {
 	hex = keybytesToHex(hex)
 
 	if isHashOrEmpty(t.root) {
@@ -29,10 +29,10 @@ func (t *Trie) EvictAccount(hex []byte) {
 
 	currentNode := t.root
 
-	accountFound := false
+	leafFound := false
 
 	// building the path
-	for depth < len(hex) && !accountFound {
+	for depth < len(hex) && !leafFound {
 		switch n := currentNode.(type) {
 		case nil:
 			// no node found at this path
@@ -82,7 +82,13 @@ func (t *Trie) EvictAccount(hex []byte) {
 		case *accountNode:
 			path[depth] = n
 			hexes[depth] = hex[:pos]
-			accountFound = true
+			if pos == len(hex)-1 {
+				leafFound = true
+			}
+		case valueNode:
+			path[depth] = n
+			hexes[depth] = hex[:pos]
+			leafFound = true
 		case hashNode:
 			// nothing to unload
 			return

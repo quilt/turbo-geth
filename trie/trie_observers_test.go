@@ -278,9 +278,9 @@ func TestObserverUnloadNodes(t *testing.T) {
 	assert.Equal(t, 0, len(observer.reloadedNodes), "adding nodes doesn't add anything")
 
 	// unloading nodes adds to the list
-	trie.EvictAccount(keys[0])
-	trie.EvictAccount(keys[1])
-	trie.EvictAccount(keys[2])
+	trie.EvictLeaf(keys[0])
+	trie.EvictLeaf(keys[1])
+	trie.EvictLeaf(keys[2])
 
 	newRootHash := trie.Hash()
 	assert.Equal(t, rootHash, newRootHash, "root hash shouldn't change")
@@ -295,8 +295,8 @@ func TestObserverUnloadNodes(t *testing.T) {
 	}
 
 	// unloading nodes adds to the list
-	trie.EvictAccount(keys[3])
-	trie.EvictAccount(keys[4])
+	trie.EvictLeaf(keys[3])
+	trie.EvictLeaf(keys[4])
 
 	newRootHash = trie.Hash()
 	assert.Equal(t, rootHash, newRootHash, "root hash shouldn't change")
@@ -311,8 +311,8 @@ func TestObserverUnloadNodes(t *testing.T) {
 	}
 
 	// unloading nodes adds to the list
-	trie.EvictAccount(keys[5])
-	trie.EvictAccount(keys[6])
+	trie.EvictLeaf(keys[5])
+	trie.EvictLeaf(keys[6])
 
 	newRootHash = trie.Hash()
 	assert.Equal(t, rootHash, newRootHash, "root hash shouldn't change")
@@ -513,7 +513,7 @@ func TestObserverMux(t *testing.T) {
 		if i < 80 {
 			trie.Delete(key)
 		} else {
-			trie.EvictAccount(key)
+			trie.EvictLeaf(key)
 		}
 	}
 

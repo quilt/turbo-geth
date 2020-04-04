@@ -23,7 +23,7 @@ import (
 )
 
 type AccountEvicter interface {
-	EvictAccount([]byte)
+	EvictLeaf([]byte)
 }
 
 type generations struct {
@@ -226,9 +226,11 @@ func evictList(evicter AccountEvicter, hexes []string) bool {
 	var empty = false
 	sort.Strings(hexes)
 
-	for _, hexStr := range hexes {
-		key := hexToKeybytes([]byte(hexStr))
-		evicter.EvictAccount(key)
+	// from long to short -- a naive way to first clean up nodes and then accounts
+	// FIXME: optimize to avoid the same paths
+	for i := len(hexes) - 1; i >= 0; i-- {
+		key := hexToKeybytes([]byte(hexes[i]))
+		evicter.EvictLeaf(key)
 	}
 	return empty
 }
