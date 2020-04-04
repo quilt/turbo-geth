@@ -160,7 +160,66 @@ func TestObserverUpdateAccountSizeViaCode(t *testing.T) {
 	}
 }
 
-func TestObserverUnloadNodes(t *testing.T) {
+func TestObserverUnloadStorageNodes(t *testing.T) {
+	rand.Seed(9999)
+
+	trie := newEmpty()
+
+	observer := newMockObserver()
+
+	trie.AddObserver(observer)
+
+	key := genNKeys(1)[0]
+
+	storageKeys := genNKeys(10)
+	// group all storage keys into a single fullNode
+	for i := range storageKeys {
+		storageKeys[i][0] = byte(0)
+		storageKeys[i][1] = byte(i)
+	}
+
+	fullKeys := make([][]byte, len(storageKeys))
+	for i, storageKey := range storageKeys {
+		fullKey := dbutils.GenerateCompositeTrieKey(common.BytesToHash(key), common.BytesToHash(storageKey))
+		fullKeys[i] = fullKey
+	}
+
+	acc := genAccount()
+	trie.UpdateAccount(key, acc)
+
+	for i, fullKey := range fullKeys {
+		trie.Update(fullKey, []byte(fmt.Sprintf("test-value-%d", i)))
+	}
+
+	rootHash := trie.Hash()
+
+	// adding nodes doesn't add anything
+	assert.Equal(t, 0, len(observer.reloadedNodes), "adding nodes doesn't add anything")
+
+	// unloading nodes adds to the list
+
+	for _, fullKey := range fullKeys {
+		trie.EvictLeaf(fullKey)
+	}
+
+	newRootHash := trie.Hash()
+	assert.Equal(t, rootHash, newRootHash, "root hash shouldn't change")
+
+	assert.Equal(t, 1, len(observer.unloadedNodes), "should unload one full node")
+
+	hex := keybytesToHex(key)
+
+	storageKey := fmt.Sprintf("%s000000", common.Bytes2Hex(hex[:len(hex)-1]))
+	assert.Equal(t, 1, observer.unloadedNodes[storageKey], "should unload structure nodes")
+
+	accNode, ok := trie.getAccount(trie.root, hex, 0)
+	assert.True(t, ok, "account should be found")
+
+	_, ok = accNode.storage.(hashNode)
+	assert.True(t, ok, "storage should be the hashnode")
+}
+
+func TestObserverUnloadAccountNodes(t *testing.T) {
 	rand.Seed(9999)
 
 	trie := newEmpty()
@@ -216,9 +275,7 @@ func TestObserverUnloadNodes(t *testing.T) {
 	assert.Equal(t, 0, len(observer.reloadedNodes), "adding nodes doesn't add anything")
 
 	// unloading nodes adds to the list
-	fmt.Println("evict1")
 	trie.EvictLeaf(keys[0])
-	fmt.Println("evict2")
 	trie.EvictLeaf(keys[1])
 	trie.EvictLeaf(keys[2])
 

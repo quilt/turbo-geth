@@ -81,9 +81,13 @@ func (t *Trie) EvictLeaf(hex []byte) {
 			depth++
 		case *accountNode:
 			path[depth] = n
-			hexes[depth] = hex[:pos]
-			if pos == len(hex)-1 {
+			if pos == len(hex) {
+				hexes[depth] = hex[:pos]
 				leafFound = true
+			} else {
+				hexes[depth] = hex[:pos]
+				currentNode = n.storage
+				depth++
 			}
 		case valueNode:
 			path[depth] = n
@@ -98,6 +102,8 @@ func (t *Trie) EvictLeaf(hex []byte) {
 	switch path[depth].(type) {
 	case *accountNode:
 		break
+	case valueNode:
+		break
 	default:
 		// we ended up not on an account
 		return
@@ -109,6 +115,8 @@ func (t *Trie) EvictLeaf(hex []byte) {
 		canEvict := false
 		isStructNode := false
 		switch n := nd.(type) {
+		case valueNode:
+			canEvict = true
 		case *accountNode:
 			canEvict = true
 			notifyAccountStorageAsEvicted(n.storage, hexes[i], t.observers)
@@ -155,6 +163,10 @@ func (t *Trie) EvictLeaf(hex []byte) {
 		parent := path[i-1]
 
 		switch p := parent.(type) {
+		case *accountNode:
+			p.storage = hnode
+			p.rootCorrect = false
+			return
 		case nil:
 			return
 		case *shortNode:
