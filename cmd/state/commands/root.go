@@ -4,27 +4,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"syscall"
 
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
 	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/spf13/cobra"
+
+	"net/http"
+	_ "net/http/pprof"
 )
 
 var (
-	cpuprofile     string
-	cpuProfileFile io.WriteCloser
-	genesisPath    string
-	genesis        *core.Genesis
+	profile     bool
+	genesisPath string
+	genesis     *core.Genesis
 )
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&cpuprofile, "cpuprofile", "", "write cpu profile `file`")
+	rootCmd.PersistentFlags().BoolVar(&profile, "profile", false, "start pprof on port 6060")
 	rootCmd.PersistentFlags().StringVar(&genesisPath, "genesis", "", "path to genesis.json file")
 }
 
@@ -57,9 +57,6 @@ var rootCmd = &cobra.Command{
 
 		startProfilingIfNeeded()
 	},
-	PersistentPostRun: func(cmd *cobra.Command, args []string) {
-		stopProfilingIfNeeded()
-	},
 }
 
 func genesisFromFile(genesisPath string) *core.Genesis {
@@ -84,27 +81,10 @@ func Execute() {
 }
 
 func startProfilingIfNeeded() {
-	if cpuprofile != "" {
-		fmt.Println("starting CPU profiling")
-		cpuProfileFile, err := os.Create(cpuprofile)
-		if err != nil {
-			log.Error("could not create CPU profile", "error", err)
-			return
-		}
-		if err := pprof.StartCPUProfile(cpuProfileFile); err != nil {
-			log.Error("could not start CPU profile", "error", err)
-			return
-		}
-	}
-}
-
-func stopProfilingIfNeeded() {
-	if cpuprofile != "" {
-		fmt.Println("stopping CPU profiling")
-		pprof.StopCPUProfile()
-	}
-
-	if cpuProfileFile != nil {
-		cpuProfileFile.Close()
+	if profile {
+		go func() {
+			fmt.Println("starting profiling at localhost:6060")
+			fmt.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
 	}
 }
