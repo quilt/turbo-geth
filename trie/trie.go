@@ -282,6 +282,8 @@ func (t *Trie) UpdateAccount(key []byte, acc *accounts.Account) {
 		newnode = &accountNode{*value, hashNode(value.Root[:]), true, false, 0, nil}
 	}
 
+	fmt.Printf("updateAccount -> %+v\n", newnode)
+
 	if t.root == nil {
 		t.root = &shortNode{Key: hex, Val: newnode}
 		t.observers.AccountCreated(hex[:len(hex)-1], newnode.size())
@@ -481,6 +483,8 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 			}
 			newNode = origAccN
 
+			fmt.Printf("updating account inline\n")
+
 			t.observers.AccountSizeChanged(key[:pos-1], origAccN.size())
 			t.observers.AccountTouched(key[:pos-1])
 			return
@@ -501,6 +505,8 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 	}
 
 	var nn node
+
+	fmt.Printf("inserting into %T\n", origNode)
 	switch n := origNode.(type) {
 	case nil:
 		if isLeaf {
@@ -576,6 +582,7 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 
 	case *duoNode:
 		i1, i2 := n.childrenIdx()
+		fmt.Printf("duoNode: [%x, %x] <- %x\n", i1, i2, key[pos])
 		switch key[pos] {
 		case i1:
 			updated, nn = t.insert(n.child1, key, pos+1, value)
@@ -618,6 +625,14 @@ func (t *Trie) insert(origNode node, key []byte, pos int, value node) (updated b
 
 	case *fullNode:
 		child := n.Children[key[pos]]
+		fmt.Printf("fullNode: ")
+		for i, c := range n.Children {
+			if c != nil {
+				fmt.Printf("%x, ", i)
+			}
+		}
+		fmt.Printf(" <- %x\n", key[pos])
+
 		if child == nil {
 			if isLeaf {
 				t.observers.AccountCreated(key[:len(key)-1], leaf.size())
@@ -843,6 +858,24 @@ func (t *Trie) convertToShortNode(child node, pos uint) node {
 // It reduces the trie to minimal form by simplifying
 // nodes on the way up after deleting recursively.
 func (t *Trie) delete(origNode node, key []byte, keyStart int, preserveAccountNode bool) (updated bool, newNode node) {
+	fmt.Printf("delete cn=%T k=%x pan=%v\n", origNode, key[:keyStart], preserveAccountNode)
+	defer func() {
+		h := t.getHasher()
+		defer returnHasherToPool(h)
+
+		var hn common.Hash
+		if newNode != nil {
+			h.hash(newNode, true, hn[:])
+		}
+		if sh, ok := newNode.(*shortNode); ok {
+			var hhn common.Hash
+			h.hash(sh.Val, true, hhn[:])
+			fmt.Printf("shortNode: k=%x v=%T %v\n", sh.Key, sh.Val, sh.Val)
+			fmt.Printf("    valueHash=%x\n", hhn)
+
+		}
+		fmt.Printf("delete cn=%T k=%x pan=%v -> up:%v nn:%T h=%x\n", origNode, key[:keyStart], preserveAccountNode, updated, newNode, hn)
+	}()
 	var nn node
 	switch n := origNode.(type) {
 	case *shortNode:
@@ -853,6 +886,8 @@ func (t *Trie) delete(origNode node, key []byte, keyStart int, preserveAccountNo
 			if preserveAccountNode {
 				removeNodeEntirely = len(key) == keyStart || matchlen == len(key[keyStart:])-1
 			}
+
+			fmt.Printf("remove node entirely? %v", removeNodeEntirely)
 
 			if removeNodeEntirely {
 				t.evictNodeFromHashMap(n)
@@ -895,6 +930,7 @@ func (t *Trie) delete(origNode node, key []byte, keyStart int, preserveAccountNo
 		} else {
 			updated = false
 			newNode = n // don't replace n on mismatch
+			fmt.Printf("mismatch? %v", true)
 		}
 		return
 

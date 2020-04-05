@@ -151,7 +151,7 @@ func Stateless(
 	writeHistory bool,
 ) {
 
-	state.MaxTrieCacheSize = uint64(triesize)
+	state.MaxTrieCacheSize = 100 * 1024 // 1000 kb //uint64(triesize)
 	startTime := time.Now()
 	sigs := make(chan os.Signal, 1)
 	interruptCh := make(chan bool, 1)
@@ -173,7 +173,6 @@ func Stateless(
 	check(err)
 	defer ethDb.Close()
 	chainConfig := params.MainnetChainConfig
-
 	stats, err := NewStatsFile(statsfile)
 	check(err)
 	defer stats.Close()
@@ -271,6 +270,8 @@ func Stateless(
 		default:
 		}
 
+		fmt.Printf("\n\n\n* * * * * * * * * *\n\n")
+
 		trace := blockNum == 50492 // false // blockNum == 545080
 		tds.SetResolveReads(blockNum >= witnessThreshold)
 		block := bcb.GetBlockByNumber(blockNum)
@@ -282,6 +283,7 @@ func Stateless(
 		gp := new(core.GasPool).AddGas(block.GasLimit())
 		usedGas := new(uint64)
 		header := block.Header()
+
 		tds.StartNewBuffer()
 		var receipts types.Receipts
 		if chainConfig.DAOForkSupport && chainConfig.DAOForkBlock != nil && chainConfig.DAOForkBlock.Cmp(block.Number()) == 0 {
@@ -329,9 +331,6 @@ func Stateless(
 			}
 			if len(resolveWitnesses) > 0 {
 				witnessDBWriter.MustUpsert(blockNum, uint32(state.MaxTrieCacheSize), resolveWitnesses)
-			}
-			if blockNum > 0 && blockNum%100000 == 0 {
-				tds.PruneTries(false)
 			}
 		}
 		execTime2 := time.Since(execStart)
@@ -411,6 +410,7 @@ func Stateless(
 		}
 		execTime4 := time.Since(execStart)
 		execStart = time.Now()
+
 		roots, err := tds.UpdateStateTrie()
 		if err != nil {
 			fmt.Printf("failed to calculate IntermediateRoot: %v\n", err)
@@ -441,10 +441,15 @@ func Stateless(
 				receipt.PostState = roots[i].Bytes()
 			}
 		}
+
+		fmt.Printf("roots: %x\n", roots)
 		nextRoot := roots[len(roots)-1]
 		if nextRoot != block.Root() {
 			fmt.Printf("Root hash does not match for block %d, expected %x, was %x\n", blockNum, block.Root(), nextRoot)
 			return
+		}
+		if blockNum == 62525 {
+			panic("boom!")
 		}
 		tds.SetBlockNr(blockNum)
 
@@ -456,14 +461,12 @@ func Stateless(
 
 		willSnapshot := interval > 0 && blockNum > 0 && blockNum >= ignoreOlderThan && blockNum%interval == 0
 
-		//tds.PruneTries(true)
-
-		if batch.BatchSize() >= 1000 || willSnapshot {
+		if batch.BatchSize() >= 10 || willSnapshot {
 			if _, err := batch.Commit(); err != nil {
 				fmt.Printf("Failed to commit batch: %v\n", err)
 				return
 			}
-			//	tds.PruneTries(true)
+			tds.PruneTries(true)
 		}
 
 		if willSnapshot {

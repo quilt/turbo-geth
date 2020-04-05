@@ -910,6 +910,7 @@ func (tds *TrieDbState) CalcTrieRoots(trace bool) (common.Hash, error) {
 // forward is `true` if the function is used to progress the state forward (by adding blocks)
 // forward is `false` if the function is used to rewind the state (for reorgs, for example)
 func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
+
 	accountUpdates := tds.aggregateBuffer.accountUpdates
 	// Perform actual updates on the tries, and compute one trie root per buffer
 	// These roots can be used to populate receipt.PostState on pre-Byzantium
@@ -917,6 +918,7 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 	// The following map is to prevent repeated clearouts of the storage
 	alreadyCreated := make(map[common.Hash]struct{})
 	for i, b := range tds.buffers {
+		fmt.Printf("updateTrieRoots[%d]\n", i)
 		// New contracts are being created at these addresses. Therefore, we need to clear the storage items
 		// that might be remaining in the trie and figure out the next incarnations
 		for addrHash := range b.created {
@@ -939,13 +941,30 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 			_ = ClearTombstonesForReCreatedAccount(tds.db, addrHash)
 		}
 
-		for addrHash, account := range b.accountUpdates {
+		hashez := make([]common.Hash, len(b.accountUpdates))
+		hz := 0
+		for addrHash := range b.accountUpdates {
+			hashez[hz] = addrHash
+			hz++
+		}
+
+		sort.SliceStable(hashez, func(i, j int) bool {
+			h1 := hashez[i]
+			h2 := hashez[j]
+			return bytes.Compare(h1[:], h2[:]) > 0
+		})
+
+		for _, addrHash := range hashez {
+			account := b.accountUpdates[addrHash]
 			if account != nil {
-				//fmt.Println("updateTrieRoots b.accountUpdates", addrHash.String(), account.Incarnation)
+				fmt.Println("updateTrieRoots b.accountUpdates", addrHash.String(), account.Incarnation)
 				tds.t.UpdateAccount(addrHash[:], account)
+				fmt.Printf("temp hash: %x\n", tds.t.Hash())
 			} else {
+				fmt.Println("delete account", addrHash.String())
 				tds.t.Delete(addrHash[:])
 				delete(b.codeUpdates, addrHash)
+				fmt.Printf("temp hash: %x\n", tds.t.Hash())
 			}
 		}
 
@@ -958,7 +977,7 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 			for keyHash, v := range m {
 				cKey := dbutils.GenerateCompositeTrieKey(addrHash, keyHash)
 				if len(v) > 0 {
-					//fmt.Printf("Update storage trie addrHash %x, keyHash %x: %x\n", addrHash, keyHash, v)
+					fmt.Printf("Update storage trie addrHash %x, keyHash %x: %x\n", addrHash, keyHash, v)
 					if forward {
 						_ = ClearTombstonesForNewStorage(tds.db, cKey)
 						tds.t.Update(cKey, v)
@@ -993,9 +1012,9 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 					ok, root := tds.t.DeepHash(addrHash[:])
 					if ok {
 						account.Root = root
-						//fmt.Printf("(b)Set %x root for addrHash %x\n", root, addrHash)
+						fmt.Printf("(b)Set %x root for addrHash %x\n", root, addrHash)
 					} else {
-						//fmt.Printf("(b)Set empty root for addrHash %x\n", addrHash)
+						fmt.Printf("(b)Set empty root for addrHash %x\n", addrHash)
 						account.Root = trie.EmptyRoot
 					}
 				}
@@ -1003,9 +1022,9 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 					ok, root := tds.t.DeepHash(addrHash[:])
 					if ok {
 						account.Root = root
-						//fmt.Printf("Set %x root for addrHash %x\n", root, addrHash)
+						fmt.Printf("Set %x root for addrHash %x\n", root, addrHash)
 					} else {
-						//fmt.Printf("Set empty root for addrHash %x\n", addrHash)
+						fmt.Printf("Set empty root for addrHash %x\n", addrHash)
 						account.Root = trie.EmptyRoot
 					}
 				}
@@ -1048,11 +1067,11 @@ func (tds *TrieDbState) updateTrieRoots(forward bool) ([]common.Hash, error) {
 				continue
 			}
 			if account, ok := b.accountUpdates[addrHash]; ok && account != nil {
-				//fmt.Printf("(b)Set empty root for addrHash %x due to deleted\n", addrHash)
+				fmt.Printf("(b)Set empty root for addrHash %x due to deleted\n", addrHash)
 				account.Root = trie.EmptyRoot
 			}
 			if account, ok := accountUpdates[addrHash]; ok && account != nil {
-				//fmt.Printf("Set empty root for addrHash %x due to deleted\n", addrHash)
+				fmt.Printf("Set empty root for addrHash %x due to deleted\n", addrHash)
 				account.Root = trie.EmptyRoot
 			}
 
@@ -1466,7 +1485,7 @@ type TrieStateWriter struct {
 func (tds *TrieDbState) PruneTries(print bool) {
 	tds.tMu.Lock()
 	defer tds.tMu.Unlock()
-	strict := true
+	strict := false
 	tds.incarnationMap = make(map[common.Hash]uint64)
 	if print {
 		trieSize := tds.t.TrieSize()
@@ -1475,24 +1494,38 @@ func (tds *TrieDbState) PruneTries(print bool) {
 	}
 
 	if strict {
-		actualSize := uint64(tds.t.TrieSize())
-		accountedSize := tds.tp.TotalSize()
-		if actualSize != accountedSize {
-			panic(fmt.Errorf("account size mismatch: trie=%v eviction=%v", actualSize, accountedSize))
-		}
-
 		actualAccounts := uint64(tds.t.NumberOfAccounts())
+		fmt.Println("number of leaves: ", actualAccounts)
 		accountedAccounts := tds.tp.NumberOf()
 		if actualAccounts != accountedAccounts {
 			panic(fmt.Errorf("account number mismatch: trie=%v eviction=%v", actualAccounts, accountedAccounts))
 		}
+
+		actualSize := uint64(tds.t.TrieSize())
+		accountedSize := tds.tp.TotalSize()
+
+		if actualSize != accountedSize {
+			panic(fmt.Errorf("account size mismatch: trie=%v eviction=%v", actualSize, accountedSize))
+		}
+
 	}
 
+	oldRoot := tds.t.Hash()
+
 	tds.tp.EvictToFitSize(tds.t, MaxTrieCacheSize)
+
+	newRoot := tds.t.Hash()
+
+	if !bytes.Equal(oldRoot[:], newRoot[:]) {
+		panic("roots dont match!")
+	}
 
 	if print {
 		trieSize := tds.t.TrieSize()
 		fmt.Printf("[After] Actual nodes size: %dMB, accounted size: %dMB\n", trieSize/1024/1024, tds.tp.TotalSize()/1024/1024)
+
+		actualAccounts := uint64(tds.t.NumberOfAccounts())
+		fmt.Println("number of leaves: ", actualAccounts)
 	}
 
 	var m runtime.MemStats

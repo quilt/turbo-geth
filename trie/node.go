@@ -237,16 +237,16 @@ func (an accountNode) String() string { return an.fstring("") }
 
 func (n *accountNode) size() uint {
 	size := uint(0)
-	size += uint(len(n.CodeHash))
+	size += 12 + uint(len(n.CodeHash))
 	size += uint(8) // nonce
-	size += uint(len(n.Root))
-	size += uint(len(n.Balance.Bytes()))
-	size += uint(len(n.code))
+	size += 12 + uint(len(n.Root))
+	size += 12 + uint(len(n.Balance.Bytes()))
+	size += 12 + uint(len(n.code))
 	return size
 }
 
 func (n valueNode) size() uint {
-	return uint(len([]byte(n)))
+	return 12 + uint(len([]byte(n)))
 }
 
 func sizeOfAccounts(node node) int64 {
@@ -254,7 +254,7 @@ func sizeOfAccounts(node node) int64 {
 	case nil:
 		return 0
 	case valueNode:
-		return int64(len([]byte(n)))
+		return int64(n.size())
 	case *shortNode:
 		return sizeOfAccounts(n.Val)
 	case *duoNode:

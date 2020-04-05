@@ -109,6 +109,9 @@ func (t *Trie) EvictLeaf(hex []byte) {
 		return
 	}
 
+	h := t.getHasher()
+	defer returnHasherToPool(h)
+
 	// now let's try to unload the node subtrie
 	for i := depth; i >= 0; i-- {
 		nd := path[i]
@@ -145,10 +148,7 @@ func (t *Trie) EvictLeaf(hex []byte) {
 
 		var hn common.Hash
 
-		// nd.reference() will return empty hash for the account node.
-		// currently, each account node is always wrapped in to a shortNode,
-		// so we don't really care
-		copy(hn[:], nd.reference())
+		h.hash(nd, true, hn[:])
 		hnode := hashNode(hn[:])
 
 		if isStructNode {
