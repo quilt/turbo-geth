@@ -78,6 +78,14 @@ func (gs *generations) touch(blockNum uint64, key []byte) {
 	}
 	currentGeneration.grabFrom(key, oldGeneration)
 	gs.keyToGeneration[string(key)] = currentGeneration
+	if oldGeneration.empty() {
+		for i := range gs.generations {
+			if gs.generations[i] == oldGeneration {
+				gs.generations[i] = nil
+				return
+			}
+		}
+	}
 }
 
 func (gs *generations) remove(key []byte) {
@@ -87,6 +95,7 @@ func (gs *generations) remove(key []byte) {
 	}
 	sizeDiff := generation.remove(key)
 	gs.totalSize += sizeDiff
+	delete(gs.keyToGeneration, string(key))
 }
 
 func (gs *generations) updateSize(blockNum uint64, key []byte, newSize uint) {
@@ -107,6 +116,9 @@ func (gs *generations) popKeysToEvict(threshold uint64) []string {
 	for uint64(gs.totalSize) > threshold && len(gs.generations) > 0 {
 		generation := gs.generations[0]
 		gs.generations = gs.generations[1:]
+		if generation == nil {
+			continue
+		}
 		gs.totalSize -= generation.totalSize
 		if gs.totalSize < 0 {
 			gs.totalSize = 0
@@ -123,11 +135,13 @@ func (gs *generations) popKeysToEvict(threshold uint64) []string {
 type generation struct {
 	sizesByKey map[string]uint
 	totalSize  int64
+	index      int
 }
 
 func newGeneration() *generation {
 	return &generation{
 		make(map[string]uint, 0),
+		0,
 		0,
 	}
 }
@@ -207,19 +221,23 @@ func (tp *TrieEviction) BlockNumber() uint64 {
 }
 
 func (tp *TrieEviction) AccountCreated(hex []byte, size uint) {
-	tp.generations.add(tp.blockNumber, hex, size)
+	key := hexToKeybytes(hex)
+	tp.generations.add(tp.blockNumber, key, size)
 }
 
 func (tp *TrieEviction) AccountDeleted(hex []byte) {
-	tp.generations.remove(hex)
+	key := hexToKeybytes(hex)
+	tp.generations.remove(key)
 }
 
 func (tp *TrieEviction) AccountTouched(hex []byte) {
-	tp.generations.touch(tp.blockNumber, hex)
+	key := hexToKeybytes(hex)
+	tp.generations.touch(tp.blockNumber, key)
 }
 
 func (tp *TrieEviction) AccountSizeChanged(hex []byte, newSize uint) {
-	tp.generations.updateSize(tp.blockNumber, hex, newSize)
+	key := hexToKeybytes(hex)
+	tp.generations.updateSize(tp.blockNumber, key, newSize)
 }
 
 func evictList(evicter AccountEvicter, hexes []string) bool {
@@ -229,8 +247,7 @@ func evictList(evicter AccountEvicter, hexes []string) bool {
 	// from long to short -- a naive way to first clean up nodes and then accounts
 	// FIXME: optimize to avoid the same paths
 	for i := len(hexes) - 1; i >= 0; i-- {
-		key := hexToKeybytes([]byte(hexes[i]))
-		evicter.EvictLeaf(key)
+		evicter.EvictLeaf([]byte(hexes[i]))
 	}
 	return empty
 }
@@ -256,6 +273,9 @@ func (tp *TrieEviction) TotalSize() uint64 {
 func (tp *TrieEviction) NumberOf() uint64 {
 	total := uint64(0)
 	for _, gen := range tp.generations.generations {
+		if gen == nil {
+			continue
+		}
 		total += uint64(len(gen.sizesByKey))
 	}
 	return total
