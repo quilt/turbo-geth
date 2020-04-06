@@ -54,10 +54,4 @@ export default class API {
     });
   }
 
-  storageTombstonesIntegrityChecks() {
-    return axios({
-      url: this.endpoint('/api/v1/storage-tombstones/integrity/'),
-      method: 'get',
-    });
-  }
 }
