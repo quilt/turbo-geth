@@ -12,6 +12,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
 	"github.com/ledgerwatch/turbo-geth/eth"
 	"github.com/ledgerwatch/turbo-geth/log"
+	"github.com/ledgerwatch/turbo-geth/p2p/enode"
 	"github.com/mattn/go-colorable"
 	"github.com/mattn/go-isatty"
 	"github.com/urfave/cli"
@@ -22,7 +23,7 @@ var (
 )
 
 func init() {
-	app.Action = simulator
+	app.Action = entry
 
 	app.Before = func(ctx *cli.Context) error {
 		setupLogger(ctx)
@@ -45,38 +46,62 @@ func main() {
 	}
 }
 
-func simulator(c *cli.Context) error {
+func entry(c *cli.Context) error {
 	log.Info("Beginning simulator . . .")
 
 	// set program to shut down on SIGTERM interrupt
 	ctx := getRootContext()
 
-	if c.Bool("debug") {
-		runDebug(c, ctx)
-	}
-
-	return nil
-}
-
-func runDebug(c *cli.Context, ctx context.Context) error {
 	// get local enode address from file
 	nodeToConnect, err := getTargetAddr()
 	if err != nil {
 		return err
 	}
 
+	// need to run debug first to send genesis (but why?)
+	runDebug(c, ctx, nodeToConnect)
+
+	return runSimulation(c, ctx, nodeToConnect)
+}
+
+func runDebug(c *cli.Context, ctx context.Context, enode *enode.Node) error {
 	server := makeP2PServer(ctx, NewSimulatorProtocol(), []string{eth.DebugName})
 
-	err = server.Start()
+	err := server.Start()
 	if err != nil {
 		panic(fmt.Errorf("could not start server: %w", err))
 	}
 
-	server.AddPeer(nodeToConnect)
+	server.AddPeer(enode)
 	time.Sleep(2 * time.Second)
 	server.Stop()
 
 	return nil
+}
+
+func runSimulation(c *cli.Context, ctx context.Context, enode *enode.Node) error {
+	blockGen, err := NewBlockGenerator(ctx, 10)
+	if err != nil {
+		panic(fmt.Sprintf("Failed to create block generator: %v", err))
+	}
+
+	sp := NewSimulatorProtocol()
+	sp.feeder = blockGen
+	sp.protocolVersion = uint32(eth.ProtocolVersions[0])
+	sp.networkID = 1
+	sp.genesis = sp.feeder.Genesis().Hash()
+
+	server := makeP2PServer(ctx, sp, []string{eth.ProtocolName})
+	if err := server.Start(); err != nil {
+		panic(fmt.Errorf("could not start server: %w", err))
+	}
+
+	server.AddPeer(enode)
+
+	<-ctx.Done()
+
+	return nil
+
 }
 
 func getRootContext() context.Context {

@@ -136,7 +136,7 @@ type statusData63 struct {
 }
 
 // statusData is the network packet for the status message for eth/64 and later.
-type statusData struct {
+type StatusData struct {
 	ProtocolVersion uint32
 	NetworkID       uint64
 	TD              *big.Int

@@ -567,7 +567,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 
 	var (
 		status63 statusData63 // safe to read after two values have been received from errc
-		status   statusData   // safe to read after two values have been received from errc
+		status   StatusData   // safe to read after two values have been received from errc
 	)
 	go func() {
 		switch {
@@ -580,7 +580,7 @@ func (p *peer) Handshake(network uint64, td *big.Int, head common.Hash, genesis 
 				GenesisBlock:    genesis,
 			})
 		case p.version >= eth64:
-			errc <- p2p.Send(p.rw, StatusMsg, &statusData{
+			errc <- p2p.Send(p.rw, StatusMsg, &StatusData{
 				ProtocolVersion: uint32(p.version),
 				NetworkID:       network,
 				TD:              td,
@@ -653,7 +653,7 @@ func (p *peer) readStatusLegacy(network uint64, status *statusData63, genesis co
 	return nil
 }
 
-func (p *peer) readStatus(network uint64, status *statusData, genesis common.Hash, forkFilter forkid.Filter) error {
+func (p *peer) readStatus(network uint64, status *StatusData, genesis common.Hash, forkFilter forkid.Filter) error {
 	msg, err := p.rw.ReadMsg()
 	if err != nil {
 		return err
