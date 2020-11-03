@@ -373,8 +373,13 @@ func runPeer(
 				log.Error("Sending new block to core P2P failed", "error", err)
 			}
 		case eth.NewPooledTransactionHashesMsg:
+			bytes := make([]byte, msg.Size)
+			_, err = io.ReadFull(msg.Payload, bytes)
+			if err != nil {
+				return fmt.Errorf("%s: reading msg into bytes: %v", peerID, err)
+			}
 			var hashes []common.Hash
-			if err := msg.Decode(&hashes); err != nil {
+			if err := rlp.DecodeBytes(bytes, &hashes); err != nil {
 				return errResp(eth.ErrDecode, "decode NewPooledTransactionHashesMsg %v: %v", msg, err)
 			}
 			var hashesStr strings.Builder
@@ -384,9 +389,18 @@ func runPeer(
 				}
 				hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
 			}
-			//log.Info(fmt.Sprintf("[%s] NewPooledTransactionHashesMsg {%s}", peerID, hashesStr.String()))
+			log.Info(fmt.Sprintf("[%s] NewPooledTransactionHashesMsg {%s}", peerID, hashesStr.String()))
+
+			outreq := proto_core.InboundMessage{
+				PeerId: []byte(peerID),
+				Id:     proto_core.InboundMessageId_NewPooledTransactionHashes,
+				Data:   bytes,
+			}
+			if _, err = coreClient.ForwardInboundMessage(ctx, &outreq, &grpc.EmptyCallOption{}); err != nil {
+				log.Error("Sending block headers to core P2P failed", "error", err)
+			}
 		case eth.GetPooledTransactionsMsg:
-			//log.Info(fmt.Sprintf("[%s] GetPooledTransactionsMsg", peerID)
+			log.Info(fmt.Sprintf("[%s] GetPooledTransactionsMsg", peerID))
 		case eth.TransactionMsg:
 			var txs []*types.Transaction
 			if err := msg.Decode(&txs); err != nil {
@@ -400,9 +414,9 @@ func runPeer(
 				hash := tx.Hash()
 				hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
 			}
-			//log.Info(fmt.Sprintf("[%s] TransactionMsg {%s}", peerID, hashesStr.String()))
+			log.Info(fmt.Sprintf("[%s] TransactionMsg {%s}", peerID, hashesStr.String()))
 		case eth.PooledTransactionsMsg:
-			//log.Info(fmt.Sprintf("[%s] PooledTransactionsMsg", peerID)
+			log.Info(fmt.Sprintf("[%s] PooledTransactionsMsg", peerID))
 		default:
 			log.Error(fmt.Sprintf("[%s] Unknown message code: %d", peerID, msg.Code))
 		}
