@@ -378,21 +378,8 @@ func runPeer(
 			if err != nil {
 				return fmt.Errorf("%s: reading msg into bytes: %v", peerID, err)
 			}
-			// var hashes []common.Hash
-			// if err := rlp.DecodeBytes(bytes, &hashes); err != nil {
-			//         return errResp(eth.ErrDecode, "decode NewPooledTransactionHashesMsg %v: %v", msg, err)
-			// }
-			// var hashesStr strings.Builder
-			// for _, hash := range hashes {
-			//         if hashesStr.Len() > 0 {
-			//                 hashesStr.WriteString(",")
-			//         }
-			//         hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
-			// }
-			// log.Info(fmt.Sprintf("[%s] NewPooledTransactionHashesMsg {%s}", peerID, hashesStr.String()))
-
 			outreq := proto_core.InboundMessage{
-				PeerId: []byte(peerID),
+				PeerId: peer.ID().Bytes(),
 				Id:     proto_core.InboundMessageId_NewPooledTransactionHashes,
 				Data:   bytes,
 			}
@@ -402,24 +389,16 @@ func runPeer(
 		case eth.GetPooledTransactionsMsg:
 			log.Info(fmt.Sprintf("[%s] GetPooledTransactionsMsg", peerID))
 		case eth.PooledTransactionsMsg:
+			log.Error("sentry got pooled tx msg")
+			fallthrough
 		case eth.TransactionMsg:
 			bytes := make([]byte, msg.Size)
 			_, err = io.ReadFull(msg.Payload, bytes)
 			if err != nil {
 				return fmt.Errorf("%s: reading msg into bytes: %v", peerID, err)
 			}
-			// var hashesStr strings.Builder
-			// for _, tx := range txs {
-			//         if hashesStr.Len() > 0 {
-			//                 hashesStr.WriteString(",")
-			//         }
-			//         hash := tx.Hash()
-			//         hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
-			// }
-			// log.Info(fmt.Sprintf("[%s] TransactionMsg {%s}", peerID, hashesStr.String()))
-
 			outreq := proto_core.InboundMessage{
-				PeerId: []byte(peerID),
+				PeerId: peer.ID().Bytes(),
 				Id:     proto_core.InboundMessageId_NewTransactions,
 				Data:   bytes,
 			}
@@ -610,6 +589,26 @@ func (ss *SentryServerImpl) getBlockHeaders(inreq *proto_sentry.SendMessageByMin
 	return &proto_sentry.SentPeers{Peers: [][]byte{[]byte(peerID)}}, nil
 }
 
+func (ss *SentryServerImpl) getPooledTransactions(inreq *proto_sentry.SendMessageByIdRequest) (*proto_sentry.SentPeers, error) {
+	peerId := bytesToString(inreq.PeerId)
+	rwRaw, found := ss.peerRwMap.Load(peerId)
+	if !found {
+		log.Debug("Could not find peer for request", "id", peerId)
+		return &proto_sentry.SentPeers{}, nil
+	}
+	rw, _ := rwRaw.(p2p.MsgReadWriter)
+	if rw == nil {
+		log.Debug("rwRaw not a p2p.msgreadwriter", "id", peerId)
+		return &proto_sentry.SentPeers{}, fmt.Errorf("find rw for peer %s", peerId)
+	}
+	if err := p2p.Send(rw, eth.PooledTransactionsMsg, inreq.Data.Data); err != nil {
+		log.Debug("failed to send to peer", "id", peerId)
+		return &proto_sentry.SentPeers{}, fmt.Errorf("send to peer %s: %v", peerId, err)
+	}
+	ss.peerTimeMap.Store(peerId, time.Now().Unix()+5)
+	return &proto_sentry.SentPeers{Peers: [][]byte{[]byte(peerId)}}, nil
+}
+
 func (ss *SentryServerImpl) SendMessageByMinBlock(_ context.Context, inreq *proto_sentry.SendMessageByMinBlockRequest) (*proto_sentry.SentPeers, error) {
 	switch inreq.Data.Id {
 	case proto_sentry.OutboundMessageId_GetBlockHeaders:
@@ -619,8 +618,13 @@ func (ss *SentryServerImpl) SendMessageByMinBlock(_ context.Context, inreq *prot
 	}
 }
 
-func (ss *SentryServerImpl) SendMessageById(context.Context, *proto_sentry.SendMessageByIdRequest) (*proto_sentry.SentPeers, error) {
-	return nil, nil
+func (ss *SentryServerImpl) SendMessageById(ctx context.Context, inreq *proto_sentry.SendMessageByIdRequest) (*proto_sentry.SentPeers, error) {
+	switch inreq.Data.Id {
+	case proto_sentry.OutboundMessageId_GetPooledTransactions:
+		return ss.getPooledTransactions(inreq)
+	default:
+		return &proto_sentry.SentPeers{}, fmt.Errorf("not implemented for message Id: %s", inreq.Data.Id)
+	}
 }
 
 func (ss *SentryServerImpl) SendMessageToRandomPeers(context.Context, *proto_sentry.SendMessageToRandomPeersRequest) (*proto_sentry.SentPeers, error) {
@@ -629,4 +633,8 @@ func (ss *SentryServerImpl) SendMessageToRandomPeers(context.Context, *proto_sen
 
 func (ss *SentryServerImpl) SendMessageToAll(context.Context, *proto_sentry.OutboundMessageData) (*proto_sentry.SentPeers, error) {
 	return nil, nil
+}
+
+func bytesToString(b []byte) string {
+	return fmt.Sprintf("%x", b[:])
 }
