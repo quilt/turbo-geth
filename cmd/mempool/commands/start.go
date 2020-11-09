@@ -15,8 +15,10 @@ import (
 	proto_core "github.com/ledgerwatch/turbo-geth/cmd/headers/core"
 	proto_sentry "github.com/ledgerwatch/turbo-geth/cmd/headers/sentry"
 	"github.com/ledgerwatch/turbo-geth/cmd/mempool/control"
+	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/ledgerwatch/turbo-geth/metrics"
+	"github.com/ledgerwatch/turbo-geth/params"
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
@@ -44,21 +46,23 @@ var startCmd = &cobra.Command{
 func start(sentryAddr string, coreAddr string) error {
 	ctx := rootContext()
 
-	log.Info("Starting mempool")
-	log.Info("Starting Core P2P server", "on", coreAddr, "connecting to sentry", coreAddr)
+	log.Info("Starting mempool", "on", coreAddr, "sentry", sentryAddr)
+
+	txCacher := core.NewTxSenderCacher(runtime.NumCPU())
+	pool := core.NewTxPool(core.DefaultTxPoolConfig, params.MainnetChainConfig, nil, txCacher)
 
 	sentryClient, _ := startSentryClient(ctx, sentryAddr)
-	controlServer, _ := startControlServer(ctx, sentryClient, coreAddr)
+	controlServer, _ := startControlServer(ctx, sentryClient, pool, coreAddr)
 
 	controlServer.Loop(ctx)
 
 	return nil
 }
 
-func startControlServer(ctx context.Context, sentryClient proto_sentry.SentryClient, coreAddr string) (*control.ControlServer, error) {
+func startControlServer(ctx context.Context, sentryClient proto_sentry.SentryClient, pool *core.TxPool, coreAddr string) (*control.ControlServer, error) {
 	listenConfig := net.ListenConfig{
 		Control: func(network, address string, _ syscall.RawConn) error {
-			log.Info("Core P2P received connection", "via", network, "from", address)
+			log.Info("mempool received connection", "via", network, "from", address)
 			return nil
 		},
 	}
@@ -85,7 +89,7 @@ func startControlServer(ctx context.Context, sentryClient proto_sentry.SentryCli
 	grpcServer = grpc.NewServer(opts...)
 
 	var controlServer *control.ControlServer
-	if controlServer, err = control.NewControlServer(sentryClient); err != nil {
+	if controlServer, err = control.NewControlServer(sentryClient, pool); err != nil {
 		return nil, fmt.Errorf("create core P2P server: %w", err)
 	}
 

@@ -14,13 +14,8 @@ import (
 )
 
 var (
-	filesDir      string // Directory when the files should be stored
-	sentryAddr    string // Address of the sentry <host>:<port>
-	coreAddr      string // Address of the core <host>:<port>
-	chaindata     string // Path to chaindata
-	database      string // Type of database (lmdb or mdbx)
-	mapSizeStr    string // Map size for LMDB
-	freelistReuse int
+	sentryAddr string // Address of the sentry <host>:<port>
+	coreAddr   string // Address of the core <host>:<port>
 )
 
 func init() {

@@ -8,7 +8,7 @@ option go_package = "./core;core";
 
 enum InboundMessageId {
   NewBlockHashes = 0; BlockHeaders = 1; BlockBodies = 2; NewBlock = 3;
-  NodeData = 4; NewPooledTransactionHashes = 5;
+  NodeData = 4; NewPooledTransactionHashes = 5; PooledTransactions = 6; NewTransactions = 7;
 }
 
 message InboundMessage {

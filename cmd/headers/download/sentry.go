@@ -378,18 +378,18 @@ func runPeer(
 			if err != nil {
 				return fmt.Errorf("%s: reading msg into bytes: %v", peerID, err)
 			}
-			var hashes []common.Hash
-			if err := rlp.DecodeBytes(bytes, &hashes); err != nil {
-				return errResp(eth.ErrDecode, "decode NewPooledTransactionHashesMsg %v: %v", msg, err)
-			}
-			var hashesStr strings.Builder
-			for _, hash := range hashes {
-				if hashesStr.Len() > 0 {
-					hashesStr.WriteString(",")
-				}
-				hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
-			}
-			log.Info(fmt.Sprintf("[%s] NewPooledTransactionHashesMsg {%s}", peerID, hashesStr.String()))
+			// var hashes []common.Hash
+			// if err := rlp.DecodeBytes(bytes, &hashes); err != nil {
+			//         return errResp(eth.ErrDecode, "decode NewPooledTransactionHashesMsg %v: %v", msg, err)
+			// }
+			// var hashesStr strings.Builder
+			// for _, hash := range hashes {
+			//         if hashesStr.Len() > 0 {
+			//                 hashesStr.WriteString(",")
+			//         }
+			//         hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
+			// }
+			// log.Info(fmt.Sprintf("[%s] NewPooledTransactionHashesMsg {%s}", peerID, hashesStr.String()))
 
 			outreq := proto_core.InboundMessage{
 				PeerId: []byte(peerID),
@@ -397,26 +397,35 @@ func runPeer(
 				Data:   bytes,
 			}
 			if _, err = coreClient.ForwardInboundMessage(ctx, &outreq, &grpc.EmptyCallOption{}); err != nil {
-				log.Error("Sending block headers to core P2P failed", "error", err)
+				log.Error("Sending new pooled transaction hashes to mempool failed", "error", err)
 			}
 		case eth.GetPooledTransactionsMsg:
 			log.Info(fmt.Sprintf("[%s] GetPooledTransactionsMsg", peerID))
-		case eth.TransactionMsg:
-			var txs []*types.Transaction
-			if err := msg.Decode(&txs); err != nil {
-				return errResp(eth.ErrDecode, "decode TransactionMsg %v: %v", msg, err)
-			}
-			var hashesStr strings.Builder
-			for _, tx := range txs {
-				if hashesStr.Len() > 0 {
-					hashesStr.WriteString(",")
-				}
-				hash := tx.Hash()
-				hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
-			}
-			log.Info(fmt.Sprintf("[%s] TransactionMsg {%s}", peerID, hashesStr.String()))
 		case eth.PooledTransactionsMsg:
-			log.Info(fmt.Sprintf("[%s] PooledTransactionsMsg", peerID))
+		case eth.TransactionMsg:
+			bytes := make([]byte, msg.Size)
+			_, err = io.ReadFull(msg.Payload, bytes)
+			if err != nil {
+				return fmt.Errorf("%s: reading msg into bytes: %v", peerID, err)
+			}
+			// var hashesStr strings.Builder
+			// for _, tx := range txs {
+			//         if hashesStr.Len() > 0 {
+			//                 hashesStr.WriteString(",")
+			//         }
+			//         hash := tx.Hash()
+			//         hashesStr.WriteString(fmt.Sprintf("%x-%x", hash[:4], hash[28:]))
+			// }
+			// log.Info(fmt.Sprintf("[%s] TransactionMsg {%s}", peerID, hashesStr.String()))
+
+			outreq := proto_core.InboundMessage{
+				PeerId: []byte(peerID),
+				Id:     proto_core.InboundMessageId_NewTransactions,
+				Data:   bytes,
+			}
+			if _, err = coreClient.ForwardInboundMessage(ctx, &outreq, &grpc.EmptyCallOption{}); err != nil {
+				log.Error("Sending new transactions to mempool failed", "error", err)
+			}
 		default:
 			log.Error(fmt.Sprintf("[%s] Unknown message code: %d", peerID, msg.Code))
 		}

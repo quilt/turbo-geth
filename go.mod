@@ -2,6 +2,8 @@ module github.com/ledgerwatch/turbo-geth
 
 go 1.15
 
+replace github.com/ledgerwatch/turbo-geth => ./
+
 require (
 	github.com/Azure/azure-storage-blob-go v0.10.0
 	github.com/JekaMas/notify v0.9.4
