@@ -601,10 +601,10 @@ func (ss *SentryServerImpl) getPooledTransactions(inreq *proto_sentry.SendMessag
 		log.Debug("rwRaw not a p2p.msgreadwriter", "id", peerId)
 		return &proto_sentry.SentPeers{}, fmt.Errorf("find rw for peer %s", peerId)
 	}
-	if err := p2p.Send(rw, eth.PooledTransactionsMsg, inreq.Data.Data); err != nil {
-		log.Debug("failed to send to peer", "id", peerId)
-		return &proto_sentry.SentPeers{}, fmt.Errorf("send to peer %s: %v", peerId, err)
-	}
+	// if err := p2p.Send(rw, eth.PooledTransactionsMsg, inreq.Data.Data); err != nil {
+	//         log.Debug("failed to send to peer", "id", peerId)
+	//         return &proto_sentry.SentPeers{}, fmt.Errorf("send to peer %s: %v", peerId, err)
+	// }
 	ss.peerTimeMap.Store(peerId, time.Now().Unix()+5)
 	return &proto_sentry.SentPeers{Peers: [][]byte{[]byte(peerId)}}, nil
 }
