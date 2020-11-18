@@ -389,7 +389,7 @@ func runPeer(
 		case eth.GetPooledTransactionsMsg:
 			log.Info(fmt.Sprintf("[%s] GetPooledTransactionsMsg", peerID))
 		case eth.PooledTransactionsMsg:
-			log.Error("sentry got pooled tx msg")
+			log.Error("sentry got pooled tx msg!!!!")
 			fallthrough
 		case eth.TransactionMsg:
 			bytes := make([]byte, msg.Size)
@@ -590,6 +590,10 @@ func (ss *SentryServerImpl) getBlockHeaders(inreq *proto_sentry.SendMessageByMin
 }
 
 func (ss *SentryServerImpl) getPooledTransactions(inreq *proto_sentry.SendMessageByIdRequest) (*proto_sentry.SentPeers, error) {
+	var hashes []common.Hash
+	if err := rlp.DecodeBytes(inreq.Data.Data, &hashes); err != nil {
+		return nil, errResp(eth.ErrDecode, "decode NewPooledTransactionHashesMsg: %v", err)
+	}
 	peerId := bytesToString(inreq.PeerId)
 	rwRaw, found := ss.peerRwMap.Load(peerId)
 	if !found {
@@ -601,10 +605,10 @@ func (ss *SentryServerImpl) getPooledTransactions(inreq *proto_sentry.SendMessag
 		log.Debug("rwRaw not a p2p.msgreadwriter", "id", peerId)
 		return &proto_sentry.SentPeers{}, fmt.Errorf("find rw for peer %s", peerId)
 	}
-	// if err := p2p.Send(rw, eth.PooledTransactionsMsg, inreq.Data.Data); err != nil {
-	//         log.Debug("failed to send to peer", "id", peerId)
-	//         return &proto_sentry.SentPeers{}, fmt.Errorf("send to peer %s: %v", peerId, err)
-	// }
+	if err := p2p.Send(rw, eth.GetPooledTransactionsMsg, &hashes); err != nil {
+		log.Debug("failed to send to peer", "id", peerId)
+		return &proto_sentry.SentPeers{}, fmt.Errorf("send to peer %s: %v", peerId, err)
+	}
 	ss.peerTimeMap.Store(peerId, time.Now().Unix()+5)
 	return &proto_sentry.SentPeers{Peers: [][]byte{[]byte(peerId)}}, nil
 }

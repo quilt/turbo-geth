@@ -30,7 +30,7 @@ func NewControlServer(sentryClient proto_sentry.SentryClient, pool *core.TxPool)
 func (cs *ControlServer) ForwardInboundMessage(ctx context.Context, inreq *proto_core.InboundMessage) (*empty.Empty, error) {
 	switch inreq.Id {
 	case proto_core.InboundMessageId_NewPooledTransactionHashes:
-		log.Info(fmt.Sprintf("[%x] NewPooledTransactionHashes", inreq.PeerId[:]))
+		// log.Info(fmt.Sprintf("[%x] NewPooledTransactionHashes", inreq.PeerId[:]))
 		return cs.newPooledTransactionHashes(ctx, inreq)
 	case proto_core.InboundMessageId_PooledTransactions:
 		log.Info(fmt.Sprintf("[%x] PooledTransactions", inreq.PeerId[:]))
