@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package txpool;
+
+message TxHashes { repeated bytes hashes = 1; }
+
+message InjectRequest { repeated bytes txs = 1; }
+
+enum InjectResult {
+  SUCCESS = 0; ALREADY_EXISTS = 1; FEE_TOO_LOW = 2; STALE = 3; INVALID = 4;
+  INTERNAL_ERROR = 5;
+}
+
+message InjectReply { repeated InjectResult injected = 1; }
+
+message GetTransactionsRequest { repeated bytes hashes = 1; }
+message GetTransactionsReply { repeated bytes txs = 1; }
+
+service Txpool {
+  rpc FindUnknownTransactions(TxHashes) returns(TxHashes);
+  rpc InjectTransactions(InjectRequest) returns(InjectReply);
+  rpc GetTransactions(GetTransactionsRequest) returns(GetTransactionsReply);
+}
