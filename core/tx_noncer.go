@@ -20,20 +20,19 @@ import (
 	"sync"
 
 	"github.com/ledgerwatch/turbo-geth/common"
-	"github.com/ledgerwatch/turbo-geth/core/state"
 )
 
 // txNoncer is a tiny virtual state database to manage the executable nonces of
 // accounts in the pool, falling back to reading from a real state database if
 // an account is unknown.
 type txNoncer struct {
-	fallback *state.IntraBlockState
+	fallback StateReader
 	nonces   map[common.Address]uint64
 	lock     sync.Mutex
 }
 
 // newTxNoncer creates a new virtual state database to track the pool nonces.
-func newTxNoncer(fallback *state.IntraBlockState) *txNoncer {
+func newTxNoncer(fallback StateReader) *txNoncer {
 	return &txNoncer{
 		fallback: fallback,
 		nonces:   make(map[common.Address]uint64),

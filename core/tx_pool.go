@@ -24,6 +24,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/prque"
 	"github.com/ledgerwatch/turbo-geth/core/state"
@@ -123,6 +124,55 @@ const (
 	TxStatusIncluded
 )
 
+type StateReader interface {
+	GetNonce(addr common.Address) uint64
+	GetBalance(addr common.Address) *uint256.Int
+	SetHead(head uint64)
+}
+
+type DiskStateReader struct {
+	chaindb      *ethdb.ObjectDatabase
+	currentState *state.IntraBlockState
+}
+
+func NewDiskStateReader(chaindb *ethdb.ObjectDatabase) *DiskStateReader {
+	return &DiskStateReader{chaindb: chaindb, currentState: state.New(state.NewPlainStateReader(chaindb))}
+}
+
+func (r *DiskStateReader) GetNonce(addr common.Address) uint64 {
+	return r.currentState.GetNonce(addr)
+}
+
+func (r *DiskStateReader) GetBalance(addr common.Address) *uint256.Int {
+	return r.currentState.GetBalance(addr)
+}
+
+func (r *DiskStateReader) SetHead(head uint64) {
+	r.currentState = state.New(state.NewPlainStateReader(r.chaindb))
+}
+
+type RpcStateReader struct {
+	head uint64
+}
+
+func NewRpcStateReader() *RpcStateReader {
+	return &RpcStateReader{}
+}
+
+func (r *RpcStateReader) GetNonce(addr common.Address) uint64 {
+	return 0
+}
+
+func (r *RpcStateReader) GetBalance(addr common.Address) *uint256.Int {
+	i := uint256.NewInt()
+	i.SetUint64(1000000000000000)
+	return i
+}
+
+func (r *RpcStateReader) SetHead(head uint64) {
+	r.head = head
+}
+
 // TxPoolConfig are the configuration parameters of the transaction pool.
 type TxPoolConfig struct {
 	Locals    []common.Address // Addresses that should be treated by default as local
@@ -208,7 +258,6 @@ func (config *TxPoolConfig) sanitize() TxPoolConfig {
 type TxPool struct {
 	config       TxPoolConfig
 	chainconfig  *params.ChainConfig
-	chaindb      *ethdb.ObjectDatabase
 	gasPrice     *big.Int
 	txFeed       event.Feed
 	scope        event.SubscriptionScope
@@ -220,9 +269,9 @@ type TxPool struct {
 
 	istanbul bool // Fork indicator whether we are in the istanbul stage.
 
-	pendingNonces *txNoncer              // Pending state tracking virtual nonces
-	currentState  *state.IntraBlockState // Current state in the blockchain head
-	currentMaxGas uint64                 // Current gas limit for transaction caps
+	pendingNonces *txNoncer   // Pending state tracking virtual nonces
+	currentState  StateReader // Current state in the blockchain head
+	currentMaxGas uint64      // Current gas limit for transaction caps
 
 	locals  *accountSet // Set of local transaction to exempt from eviction rules
 	journal *txJournal  // Journal of local transaction to back up to disk
@@ -251,7 +300,7 @@ type txpoolResetRequest struct {
 
 // NewTxPool creates a new transaction pool to gather, sort and filter inbound
 // transactions from the network.
-func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chaindb *ethdb.ObjectDatabase, senderCacher *TxSenderCacher) *TxPool {
+func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, state StateReader, senderCacher *TxSenderCacher) *TxPool {
 	// Sanitize the input to ensure no vulnerable gas prices are set
 	config = (&config).sanitize()
 
@@ -259,7 +308,6 @@ func NewTxPool(config TxPoolConfig, chainconfig *params.ChainConfig, chaindb *et
 	pool := &TxPool{
 		config:         config,
 		chainconfig:    chainconfig,
-		chaindb:        chaindb,
 		signer:         types.NewEIP155Signer(chainconfig.ChainID),
 		pending:        make(map[common.Address]*txList),
 		queue:          make(map[common.Address]*txList),
@@ -385,7 +433,7 @@ func (pool *TxPool) loop() {
 func (pool *TxPool) resetHead(blockGasLimit uint64, blockNumber uint64) {
 	pool.mu.Lock()
 	defer pool.mu.Unlock()
-	pool.currentState = state.New(state.NewPlainStateReader(pool.chaindb))
+	pool.currentState.SetHead(blockNumber)
 	pool.pendingNonces = newTxNoncer(pool.currentState)
 	pool.currentMaxGas = blockGasLimit
 	pool.istanbul = pool.chainconfig.IsIstanbul(big.NewInt(int64(blockNumber + 1)))

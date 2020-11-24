@@ -355,7 +355,7 @@ func New(stack *node.Node, config *Config) (*Ethereum, error) {
 		}
 	}
 
-	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, chainDb, txCacher)
+	eth.txPool = core.NewTxPool(config.TxPool, chainConfig, core.NewDiskStateReader(chainDb), txCacher)
 
 	stagedSync := config.StagedSync
 
