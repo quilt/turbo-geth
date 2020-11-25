@@ -415,6 +415,10 @@ func New(stack *node.Node, config *Config) (*Ethereum, error) {
 		}
 	}
 
+	if stack.Config().TxPoolProviderAddr != "" {
+		log.Error("txpoolproviders not yet configured", "addr", stack.Config().TxPoolProviderAddr)
+	}
+
 	checkpoint := config.Checkpoint
 	if checkpoint == nil {
 		//checkpoint = params.TrustedCheckpoints[genesisHash]
