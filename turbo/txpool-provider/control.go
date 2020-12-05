@@ -3,6 +3,7 @@ package txpoolprovider
 import (
 	"context"
 	"fmt"
+	"math/big"
 
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
@@ -28,38 +29,42 @@ func (c *TxPoolControlServer) AccountInfo(ctx context.Context, request *pb.Accou
 	blockHash := common.BytesToHash(request.BlockHash)
 	address := common.BytesToAddress(request.Account)
 
-	// begin db transaction
-	tx, err1 := c.kv.Begin(ctx, nil, ethdb.RO)
-	if err1 != nil {
-		return nil, fmt.Errorf("getBalance cannot open tx: %v", err1)
-	}
-	defer tx.Rollback()
-
 	rawdb := ethdb.NewObjectDatabase(c.kv)
 	blockNumber, _, err := rpchelper.GetBlockNumber(rpc.BlockNumberOrHash{BlockHash: &blockHash, RequireCanonical: true}, rawdb)
 	if err != nil {
 		return nil, err
 	}
 
-	reader := adapter.NewStateReader(tx, blockNumber)
+	nonce := uint64(0)
+	balance := common.Big0
+	getter := func(tx ethdb.Tx) error {
+		reader := adapter.NewStateReader(tx, blockNumber)
+		account, err := reader.ReadAccountData(address)
+		if account != nil {
+			nonce = account.Nonce
+			balance = account.Balance.ToBig()
+		}
 
-	account, err := reader.ReadAccountData(address)
-	if err != nil {
+		return err
+	}
+	if err := c.kv.View(ctx, getter); err != nil {
 		return nil, fmt.Errorf("cant get a balance for account %q for block %v", address.String(), blockNumber)
 	}
 
-	balance := common.Big0
-	nonce := uint64(0)
-	if account != nil {
-		nonce = account.Nonce
-		balance = account.Balance.ToBig()
-	}
+	return buildAccountInfoReply(nonce, balance)
+}
 
+func (c *TxPoolControlServer) BlockStream(*pb.BlockStreamRequest, pb.TxpoolControl_BlockStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method BlockStream not implemented")
+}
+
+func (c *TxPoolControlServer) mustEmbedUnimplementedTxpoolControlServer() {}
+
+func buildAccountInfoReply(nonce uint64, balance *big.Int) (*pb.AccountInfoReply, error) {
 	balanceBytes, err := rlp.EncodeToBytes(balance)
 	if err != nil {
 		return nil, err
 	}
-
 	nonceBytes, err := rlp.EncodeToBytes(nonce)
 	if err != nil {
 		return nil, err
@@ -70,9 +75,3 @@ func (c *TxPoolControlServer) AccountInfo(ctx context.Context, request *pb.Accou
 		Nonce:   nonceBytes,
 	}, nil
 }
-
-func (c *TxPoolControlServer) BlockStream(*pb.BlockStreamRequest, pb.TxpoolControl_BlockStreamServer) error {
-	return status.Errorf(codes.Unimplemented, "method BlockStream not implemented")
-}
-
-func (c *TxPoolControlServer) mustEmbedUnimplementedTxpoolControlServer() {}
