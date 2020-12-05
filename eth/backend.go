@@ -35,6 +35,7 @@ import (
 
 	"github.com/ledgerwatch/turbo-geth/turbo/snapshotsync"
 	"github.com/ledgerwatch/turbo-geth/turbo/snapshotsync/bittorrent"
+	txpoolprovider "github.com/ledgerwatch/turbo-geth/turbo/txpool-provider"
 
 	ethereum "github.com/ledgerwatch/turbo-geth"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
@@ -82,9 +83,10 @@ type Ethereum struct {
 	dialCandidates  enode.Iterator
 
 	// DB interfaces
-	chainDb    *ethdb.ObjectDatabase // Block chain database
-	chainKV    ethdb.KV              // Same as chainDb, but different interface
-	privateAPI *grpc.Server
+	chainDb      *ethdb.ObjectDatabase // Block chain database
+	chainKV      ethdb.KV              // Same as chainDb, but different interface
+	privateAPI   *grpc.Server
+	poolProvider *grpc.Server
 
 	eventMux       *event.TypeMux
 	engine         consensus.Engine
@@ -416,7 +418,10 @@ func New(stack *node.Node, config *Config) (*Ethereum, error) {
 	}
 
 	if stack.Config().TxPoolProviderAddr != "" {
-		log.Error("txpoolproviders not yet configured", "addr", stack.Config().TxPoolProviderAddr)
+		eth.poolProvider, err = txpoolprovider.StartGrpc(chainDb.KV(), stack.Config().TxPoolProviderAddr, nil)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	checkpoint := config.Checkpoint
